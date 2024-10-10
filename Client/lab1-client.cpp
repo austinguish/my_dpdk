@@ -1,5 +1,6 @@
 #include "udp_header.h"
 #include <atomic>
+#include <chrono>
 #include <rte_atomic.h>
 #include <rte_cycles.h>
 #include <rte_eal.h>
@@ -30,12 +31,6 @@ struct packet_info {
   uint64_t send_time;
   bool acked;
 };
-
-// struct packet_time
-// {
-//     uint64_t send_time;
-//     uint64_t acked_time;
-// };
 
 struct flow_state {
   uint64_t next_seq_num;
@@ -252,7 +247,13 @@ static int receive_thread(__attribute__((unused)) void *arg) {
 
       if (flow_id >= 0 && flow_id < flow_num) {
         rte_spinlock_lock(&flow_table[flow_id].lock);
-
+        if (ack_num % 1000 == 0 || ack_num <= 100) {
+          // print the rtt
+          uint64_t current_time = get_current_time();
+          uint64_t send_time = flow_table[flow_id].packets[ack_num].send_time;
+          printf("RTT for flow %d, seq %lu: %.3f ms\n", flow_id, ack_num,
+                 (double)(current_time - send_time) / 1e6);
+        }
         if (ack_num > flow_table[flow_id].last_acked) {
           flow_table[flow_id].last_acked = ack_num;
 
@@ -325,6 +326,9 @@ int main(int argc, char *argv[]) {
   }
 
   NUM_PING = flow_size / packet_len;
+  if (flow_size < packet_len) {
+    NUM_PING = 1;
+  }
   printf("flow_num is %d, flow_size is %ld\n", flow_num, flow_size);
   printf("NUM_PING is %d\n", NUM_PING);
 
@@ -348,11 +352,6 @@ int main(int argc, char *argv[]) {
   RTE_ETH_FOREACH_DEV(portid)
   if (portid == 1 && port_init(portid, mbuf_pool) != 0)
     rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu16 "\n", portid);
-  // if (initialize_flows(1, flow_num) != 0)
-  // {
-  //     rte_exit(EXIT_FAILURE, "Failed to initialize flows with server\n");
-  // }
-  // check how many queues on port 1 tx and rx
   rte_eth_dev_info dev_info;
   rte_eth_dev_info_get(1, &dev_info);
 
@@ -369,7 +368,7 @@ int main(int argc, char *argv[]) {
   }
 
   active_flows = flow_num;
-  auto start_time = get_current_time();
+  auto start_time = std::chrono::high_resolution_clock::now();
   // launch
   for (int i = 0; i < flow_num; i++) {
     int *arg = new int(i);
@@ -386,12 +385,16 @@ int main(int argc, char *argv[]) {
 
   // Wait for all threads to complete
   rte_eal_mp_wait_lcore();
-  auto end_time = get_current_time();
-  auto total_time = (double)(end_time - start_time);
+  auto end_time = std::chrono::high_resolution_clock::now();
+  auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+      end_time - start_time);
+  // in ms
+  auto total_time = duration.count() / 1e6;
+  // in bytes
   auto total_data = (double)(flow_size * flow_num);
-  printf("Total time: %.3f ms\n", total_time / 1e6);
+  printf("Total time: %.3f ms\n", total_time);
   printf("Total data: %.3f MB\n", total_data / 1e6);
-  printf("Throughput: %.3f Gbps\n", total_data * 8 / total_time);
+  printf("Throughput: %.3f Gbps\n", (total_data * 8) / (total_time * 1e9));
   rte_eal_cleanup();
 
   delete[] flow_table;

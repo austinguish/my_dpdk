@@ -17,14 +17,24 @@
 #define BURST_SIZE 512
 #define MAX_FLOW_NUM 100
 #define PORT_NUM 5001
+#include <signal.h>
 int ack_len = 10;
-
+// use a atomic variable to store the all the packets received
+uint64_t received_packets;
 struct rte_mempool *mbuf_pool = NULL;
 static struct rte_ether_addr my_eth;
 struct flow_state_receiver *flow_state;
 struct rte_ring *flow_rings[MAX_FLOWS];
 std::vector<std::thread> flow_threads;
+volatile bool force_quit = false;
 
+static void signal_handler(int signum) {
+  if (signum == SIGINT || signum == SIGTERM) {
+    printf("\n\nSignal %d received, preparing to exit...\n", signum);
+    printf("Total received packets: %lu\n", received_packets);
+    exit(0);
+  }
+}
 static void process_packet(struct rte_mbuf *pkt, int flow_id);
 
 static struct rte_mbuf *construct_ack(struct rte_mbuf *pkt, int flow_id);
@@ -423,10 +433,11 @@ static int rx_thread(void *arg) {
 
     // uint64_t cur_time = rte_get_timer_cycles();
     // if (cur_time - last_print_time > rte_get_timer_hz()) {
-    //     printf("Debug: Total received packets: %lu, Current free mbufs:
-    //     %u\n",
-    //            total_rx, rte_mempool_avail_count(mbuf_pool));
-    //     last_print_time = cur_time;
+    //   printf("Debug: Total received packets: %lu, Current free mbufs:
+    //              % u\n ",
+    //              total_rx,
+    //          rte_mempool_avail_count(mbuf_pool));
+    //   last_print_time = cur_time;
     // }
 
     // if (nb_rx > 0) {
@@ -444,9 +455,11 @@ static int rx_thread(void *arg) {
       int flow_num = dst_port - PORT_NUM;
 
       if (flow_num < 0 || flow_num >= MAX_FLOWS) {
+        // this is a bad packet
         rte_pktmbuf_free(pkt);
         continue;
       }
+      received_packets += nb_rx;
 
       // printf("Debug: Enqueuing packet for flow %d, seq %lu\n", flow_num,
       // udp_hdr->seq);
@@ -482,6 +495,8 @@ void init_flow_state() {
 }
 
 int main(int argc, char *argv[]) {
+  signal(SIGINT, signal_handler);
+  signal(SIGTERM, signal_handler);
   // struct rte_mempool *mbuf_pool;
   unsigned nb_ports = 1;
   uint16_t portid = 1;
