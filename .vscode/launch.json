@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "C/C++ Runner: Debug Session",
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "/Users/austinguish/Desktop/2024/2024Fall/cs740/handin/Client",
+      "program": "/Users/austinguish/Desktop/2024/2024Fall/cs740/handin/Client/build/Debug/outDebug"
+    }
+  ]
+}
