@@ -1,4 +1,4 @@
-#include "flowstate.h"
+#include "flow_state.h"
 #include "udp_header.h"
 #include <rte_ethdev.h>
 #include <rte_lcore.h>
@@ -12,7 +12,7 @@
 #define TX_RING_SIZE 4096
 #define MAX_FLOWS 8
 #define RING_SIZE 1024
-#define NUM_MBUFS 40955
+#define NUM_MBUFS 40959
 #define MBUF_CACHE_SIZE 250
 #define BURST_SIZE 512
 #define MAX_FLOW_NUM 100
@@ -442,6 +442,11 @@ static int rx_thread(void *arg) {
           sizeof(struct rte_ether_hdr) + sizeof(struct rte_ipv4_hdr));
       uint16_t dst_port = rte_be_to_cpu_16(udp_hdr->udp_hdr.dst_port);
       int flow_num = dst_port - PORT_NUM;
+
+      if (flow_num < 0 || flow_num >= MAX_FLOWS) {
+        rte_pktmbuf_free(pkt);
+        continue;
+      }
 
       // printf("Debug: Enqueuing packet for flow %d, seq %lu\n", flow_num,
       // udp_hdr->seq);

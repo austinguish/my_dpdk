@@ -252,22 +252,10 @@ static int receive_thread(__attribute__((unused)) void *arg) {
 
       if (flow_id >= 0 && flow_id < flow_num) {
         rte_spinlock_lock(&flow_table[flow_id].lock);
-        // set the acked time
-        // flow_table[flow_id].packet_times[ack_num].acked_time =
-        // get_current_time(); update the acked flag if ack_num%100 == 0 print
-        // the acked_time - send_time and convert to ms if (ack_num % 100 == 0)
-        // {
-        //     uint64_t send_time =
-        //     flow_table[flow_id].packets[ack_num].send_time; uint64_t
-        //     acked_time = get_current_time(); printf("Flow %d: Packet %lu RTT
-        //     = %.3f ms\n", flow_id, ack_num,
-        //            (acked_time - send_time) / 1e6);
-        // }
 
         if (ack_num > flow_table[flow_id].last_acked) {
           flow_table[flow_id].last_acked = ack_num;
 
-          // 清理已确认的包
           for (auto it = flow_table[flow_id].packets.begin();
                it != flow_table[flow_id].packets.end();) {
             if (it->first <= ack_num) {
@@ -277,9 +265,6 @@ static int receive_thread(__attribute__((unused)) void *arg) {
             }
           }
         }
-
-        // 更新接收窗口大小
-        // flow_table[flow_id].window_size = received_window_size;
 
         rte_spinlock_unlock(&flow_table[flow_id].lock);
       }
